@@ -10,7 +10,36 @@ Also see https://github.com/Open-EO/openeo-python-driver/issues/8
 """
 
 from typing import List, Tuple
+
+from openeo import ImageCollection
 from openeo_driver.errors import OpenEOApiException
+
+
+class Collections:
+    """
+    Base contract/implementation for collection related functionality: listing collections' metadata,
+    loading collections, ...
+
+    https://open-eo.github.io/openeo-api/apireference/#tag/EO-Data-Discovery
+    """
+
+    def list_collections(self) -> List[dict]:
+        """
+        List available collections with basic information.
+        https://open-eo.github.io/openeo-api/apireference/#tag/EO-Data-Discovery/paths/~1collections/get"""
+        return []
+
+    def get_collection_metadata(self, collection_id: str) -> dict:
+        """
+        List all information about a specific collection
+        https://open-eo.github.io/openeo-api/apireference/#tag/EO-Data-Discovery/paths/~1collections~1{collection_id}/get
+        """
+        raise NotImplementedError()
+
+    # TODO: https://open-eo.github.io/openeo-api/apireference/#tag/EO-Data-Discovery/paths/~1subscription/get
+
+    def load_collection(self, collection_id: str, viewing_parameters: dict) -> ImageCollection:
+        raise NotImplementedError()
 
 
 class SecondaryServices:
@@ -73,5 +102,8 @@ class OpenEoBackendImplementation:
     Simple container of all openEo "microservices"
     """
 
-    def __init__(self, secondary_services: SecondaryServices):
-        self.secondary_services = secondary_services
+    def __init__(self,
+                 collections: Collections = None,
+                 secondary_services: SecondaryServices = None):
+        self.collections = collections or Collections()
+        self.secondary_services = secondary_services or SecondaryServices()

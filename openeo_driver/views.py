@@ -8,7 +8,7 @@ from werkzeug.exceptions import HTTPException, BadRequest, NotFound
 
 from openeo_driver.errors import OpenEOApiException, CollectionNotFoundException
 from openeo_driver.save_result import SaveResult
-from .ProcessGraphDeserializer import (evaluate, health_check, get_layers, getProcesses, getProcess, get_layer,
+from .ProcessGraphDeserializer import (evaluate, health_check, getProcesses, getProcess,
                                        create_batch_job, run_batch_job, get_batch_job_info, cancel_batch_job,
                                        get_batch_job_result_filenames, get_batch_job_result_output_dir,
                                        backend_implementation,
@@ -523,22 +523,23 @@ def collection(collection_id):
     return collection_by_id(collection_id)
 
 
-@openeo_bp.route('/collections' , methods=['GET'])
+@openeo_bp.route('/collections', methods=['GET'])
 def collections():
-        layers = get_layers()
-        return jsonify({
-            'collections':layers,
-            'links':[]
-        })
+    collections = backend_implementation.collections.list_collections()
+    # TODO: check presence of some basic items in collection listing?
+    return jsonify({
+        'collections': collections,
+        'links': []
+    })
 
 
 @openeo_bp.route('/collections/<collection_id>' , methods=['GET'])
 def collection_by_id(collection_id):
     try:
-        layer = get_layer(collection_id)
-    except ValueError:
+        metadata = backend_implementation.collections.get_collection_metadata(collection_id)
+    except (ValueError, KeyError):
         raise CollectionNotFoundException(collection_id)
-    return jsonify(layer)
+    return jsonify(metadata)
 
 
 @openeo_bp.route('/processes' , methods=['GET'])

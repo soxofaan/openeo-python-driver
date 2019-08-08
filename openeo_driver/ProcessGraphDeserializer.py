@@ -64,9 +64,6 @@ def register_extra_processes():
 register_extra_processes()
 
 
-def getImageCollection(product_id:str, viewingParameters):
-    raise Exception("Please provide getImageCollection method in your base package.")
-
 def health_check():
     return "Default health check OK!"
 
@@ -103,9 +100,9 @@ def evaluate(processGraph: dict, viewingParameters = None) -> ImageCollection:
 def convert_node_03x(processGraph, viewingParameters = None):
     if type(processGraph) is dict:
         if 'product_id' in processGraph:
-            return getImageCollection(processGraph['product_id'],viewingParameters)
+            return backend_implementation.collections.load_collection(processGraph['product_id'], viewingParameters)
         elif 'collection_id' in processGraph:
-            return getImageCollection(processGraph['collection_id'],viewingParameters)
+            return backend_implementation.collections.load_collection(processGraph['collection_id'], viewingParameters)
         elif 'process_graph' in processGraph:
             return convert_node(processGraph['process_graph'], viewingParameters)
         elif 'imagery' in processGraph:
@@ -167,8 +164,9 @@ def extract_arg_list(args:Dict,names:list):
 @process(description="Load an data cube (image collection) based on it's name",
          args=[ProcessDetails.Arg('name', "The name of the collection to load."),])
 def get_collection( args:Dict, viewingParameters)->ImageCollection:
+    # TODO: get_collection is deprecated in favor of load_collection
     name = extract_arg(args,'name')
-    return getImageCollection(name,viewingParameters)
+    return backend_implementation.collections.load_collection(name, viewingParameters)
 
 @process(description='Loads a collection from the current back-end by its id and returns it as processable data cube. The data that is added to the data cube can be restricted with the additional spatial_extent, temporal_extent, bands and properties.',
          args=[ProcessDetails.Arg('id', 'The collection id.'), ])
@@ -190,7 +188,7 @@ def load_collection( args:Dict, viewingParameters)->ImageCollection:
     if "bands" in args and args['bands'] is not None:
         viewingParameters["bands"] = extract_arg(args, "bands")
 
-    return getImageCollection(name,viewingParameters)
+    return backend_implementation.collections.load_collection(name, viewingParameters)
 
 @process(description="Apply a function to the given set of bands in this image collection. DEPRECATED, use 'apply'",
          args=[ProcessDetails.Arg('function', "A function that gets the value of one pixel (including all bands) as input and produces a single scalar or tuple output."),
@@ -677,9 +675,7 @@ def getProcess(process_id: str):
 _driver_implementation_package = os.getenv('DRIVER_IMPLEMENTATION_PACKAGE', "dummy_impl")
 _log.info('Using driver implementation package {d}'.format(d=_driver_implementation_package))
 i = importlib.import_module(_driver_implementation_package)
-getImageCollection = i.getImageCollection
-get_layers = i.get_layers
-get_layer = i.get_layer
+
 try:
     create_process_visitor = i.create_process_visitor
 except AttributeError as e:

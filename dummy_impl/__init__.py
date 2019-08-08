@@ -3,15 +3,17 @@ from openeo import ImageCollection
 import os
 from shapely.geometry import Polygon, MultiPolygon
 from shapely.geometry.collection import GeometryCollection
-from typing import Union
+from typing import Union, List
 from openeo.error_summary import *
 import numbers
 
-from openeo_driver.backend import SecondaryServices, OpenEoBackendImplementation
+from openeo_driver.backend import SecondaryServices, OpenEoBackendImplementation, Collections
 
+# TODO: this is test-specific at first sight, can we move it to there?
 collections = {}
 
-def getImageCollection(product_id, viewingParameters):
+
+def _load_collection(product_id, viewingParameters):
     if product_id in collections:
         return collections[product_id]
     image_collection = ImageCollection()
@@ -95,30 +97,33 @@ def getImageCollection(product_id, viewingParameters):
     return image_collection
 
 
+class DummyCollections(Collections):
+    _collections = {
+        'DUMMY_S2_FAPAR_CLOUDCOVER': {
+            'product_id': 'DUMMY_S2_FAPAR_CLOUDCOVER',
+            'name': 'DUMMY_S2_FAPAR_CLOUDCOVER',
+            'id': 'DUMMY_S2_FAPAR_CLOUDCOVER',
+            'description': 'fraction of the solar radiation absorbed by live leaves for the photosynthesis activity',
+            'license': 'free',
+            'extent': {
+                'spatial': [-180, -90, 180, 90],
+                'temporal': ["2019-01-02", "2019-02-03"],
+            },
+            'links': [],
+            'stac_version': '0.1.2',
+            'properties': {'cube:dimensions': {}},
+            'other_properties': {},
+        }
+    }
 
-fapar_layer = {
-    'product_id': 'DUMMY_S2_FAPAR_CLOUDCOVER',
-    'name': 'DUMMY_S2_FAPAR_CLOUDCOVER',
-    'id': 'DUMMY_S2_FAPAR_CLOUDCOVER',
-    'description': 'fraction of the solar radiation absorbed by live leaves for the photosynthesis activity',
-    'license': 'free',
-    'extent': {
-        'spatial': [-180, -90, 180, 90],
-        'temporal': ["2019-01-02", "2019-02-03"],
-    },
-    'links': [],
-    'stac_version': '0.1.2',
-    'properties': {'cube:dimensions': {}},
-    'other_properties': {},
-}
-def get_layers():
-    return [fapar_layer]
+    def list_collections(self) -> List[dict]:
+        return list(self._collections.values())
 
-def get_layer(product_id):
-    if product_id == 'DUMMY_S2_FAPAR_CLOUDCOVER':
-        return fapar_layer
-    else:
-        raise ValueError("Unknown collection: " + product_id)
+    def get_collection_metadata(self, collection_id: str) -> dict:
+        return self._collections[collection_id]
+
+    def load_collection(self, collection_id: str, viewing_parameters: dict) -> ImageCollection:
+        return _load_collection(collection_id, viewingParameters=viewing_parameters)
 
 
 def health_check():
@@ -200,8 +205,8 @@ class DummySecondaryServices(SecondaryServices):
         }
 
 
-
 def get_openeo_backend_implementation() -> OpenEoBackendImplementation:
     return OpenEoBackendImplementation(
-        secondary_services=DummySecondaryServices()
+        collections=DummyCollections(),
+        secondary_services=DummySecondaryServices(),
     )
