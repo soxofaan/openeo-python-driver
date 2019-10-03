@@ -1,7 +1,0 @@
-flask
-requests
-shapely
-werkzeug
-openeo
-gunicorn
-geopandas==0.3.0

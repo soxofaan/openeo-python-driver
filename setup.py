@@ -37,10 +37,20 @@ setup(
     tests_require=['pytest','mock','requests-mock'],
     install_requires=[
         'flask',
+        'werkzeug',
+        'requests',
         'openeo',
         'gunicorn',
-        'shapely'
+        'shapely',
+        'geopandas>=0.3.0',
     ],
+    extras_require={
+        'dev': [
+            'pytest',
+            'mock',
+            'requests_mock',
+        ]
+    },
     classifiers=[
         'Programming Language :: Python :: 3',
         'License :: OSI Approved :: Apache Software License',
