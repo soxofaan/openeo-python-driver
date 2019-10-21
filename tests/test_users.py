@@ -138,7 +138,7 @@ def test_bearer_auth_empty(app, url):
 @pytest.mark.parametrize("url", ["/private/hello", "/personal/hello"])
 def test_bearer_auth_basic_invalid_token(app, url):
     with app.test_client() as client:
-        headers = {"Authorization": "Bearer basic.blehrff"}
+        headers = {"Authorization": "Bearer basic//blehrff"}
         response = client.get(url, headers=headers)
         assert_invalid_token_failure(response)
 
@@ -153,7 +153,7 @@ def test_bearer_auth_basic_token_success(app, url, expected_data):
         resp = client.get("/basic/auth", headers=headers)
         assert resp.status_code == 200
         access_token = resp.json["access_token"]
-        headers = {"Authorization": "Bearer " + access_token}
+        headers = {"Authorization": "Bearer basic//" + access_token}
         resp = client.get(url, headers=headers)
         assert resp.status_code == 200
         assert resp.data == expected_data
@@ -169,7 +169,7 @@ def test_bearer_auth_oidc_invalid_token(app, url, requests_mock):
 
     with app.test_client() as client:
         oidc_access_token = "kcneududhey8rmxje3uhoe9djdndjeu3rkrnmlxpds834r"
-        headers = {"Authorization": "Bearer " + oidc_access_token}
+        headers = {"Authorization": "Bearer oidc/0/" + oidc_access_token}
         resp = client.get(url, headers=headers)
         assert_invalid_token_failure(resp)
 
@@ -194,7 +194,7 @@ def test_bearer_auth_oidc_success(app, url, expected_data, requests_mock):
     with app.test_client() as client:
         # Note: user id is "hidden" in access token
         oidc_access_token = "kcneududhey8rmxje3uhs.oidcuser.o94h4oe9djdndjeu3rkrnmlxpds834r"
-        headers = {"Authorization": "Bearer " + oidc_access_token}
+        headers = {"Authorization": "Bearer oidc/0/" + oidc_access_token}
         resp = client.get(url, headers=headers)
         assert resp.status_code == 200
         assert resp.data == expected_data

@@ -29,8 +29,6 @@ class User:
 class HttpAuthHandler:
     """Handler for processing HTTP authentication in a Flask app context"""
 
-    _BASIC_ACCESS_TOKEN_PREFIX = 'basic.'
-
     def public(self, f: Callable):
         """
         Decorator for public request handler: no authorization is required
@@ -80,16 +78,22 @@ class HttpAuthHandler:
             raise AuthenticationSchemeInvalidException
         return auth_code
 
+    def _parse_bearer_token(self, bearer_token: str) -> Tuple[str, str, str]:
+        try:
+            token_type, provider_id, access_token = bearer_token.split('/')
+            return token_type.lower(), provider_id, access_token
+        except Exception:
+            raise TokenInvalidException
+
     def get_user_from_bearer_token(self, request: Request) -> User:
         """Get User object from bearer token of request."""
-        token = self.get_auth_token(request, "Bearer")
-        if token.startswith(self._BASIC_ACCESS_TOKEN_PREFIX):
-            return self.resolve_basic_access_token(token)
-        elif len(token) > 16:
-            # Assume token is OpenID Connect access token
-            return self.resolve_oidc_access_token(token)
-        else:
-            raise TokenInvalidException
+        bearer_token = self.get_auth_token(request, "Bearer")
+        token_type, provider_id, access_token = self._parse_bearer_token(bearer_token)
+        if token_type.lower() == 'basic':
+            return self.resolve_basic_access_token(access_token)
+        elif token_type.lower() == 'oidc':
+            return self.resolve_oidc_access_token(provider_id, access_token)
+        raise TokenInvalidException
 
     def parse_basic_auth_header(self, request: Request) -> Tuple[str, str]:
         """
@@ -120,21 +124,18 @@ class HttpAuthHandler:
         # TODO real resolving of given user name to user_id
         user_id = username
         # TODO: generate real access token and link to user in some key value store
-        access_token = self._BASIC_ACCESS_TOKEN_PREFIX + base64.urlsafe_b64encode(user_id.encode('utf-8')).decode(
-            'ascii')
+        access_token = base64.urlsafe_b64encode(user_id.encode('utf-8')).decode('ascii')
         return access_token, user_id
 
     def resolve_basic_access_token(self, access_token: str) -> User:
+        # Resolve token to user id
         try:
-            head, sep, tail = access_token.partition(self._BASIC_ACCESS_TOKEN_PREFIX)
-            assert head == '' and sep == self._BASIC_ACCESS_TOKEN_PREFIX and len(tail) > 0
-            # Resolve token to user id
-            user_id = base64.urlsafe_b64decode(tail.encode('ascii')).decode('utf-8')
+            user_id = base64.urlsafe_b64decode(access_token.encode('ascii')).decode('utf-8')
         except Exception:
             raise TokenInvalidException
         return User(user_id=user_id, info={"authentication": "basic"})
 
-    def resolve_oidc_access_token(self, access_token: str) -> User:
+    def resolve_oidc_access_token(self, provider_id: str, access_token: str) -> User:
         try:
             resp = requests.get(current_app.config["OPENID_CONNECT_CONFIG_URL"])
             resp.raise_for_status()
