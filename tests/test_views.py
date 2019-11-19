@@ -4,6 +4,7 @@ from multiprocessing import Pool
 from unittest import TestCase, skip
 
 import dummy_impl
+from openeo_driver.users import HttpAuthHandler
 from openeo_driver.views import app
 
 os.environ["DRIVER_IMPLEMENTATION_PACKAGE"] = "dummy_impl"
@@ -12,10 +13,17 @@ client = app.test_client()
 
 
 class Test(TestCase):
+
+    user_id = 'test'
+
     def setUp(self):
         app.config['TESTING'] = True
         self.client = app.test_client()
-        self._auth_header = {"Authorization": "Bearer basic.dGVzdA=="}
+        self._auth_header = {
+            "Authorization": "Bearer {token}".format(
+                token=HttpAuthHandler.encode_basic_access_token(user_id=self.user_id)
+            )
+        }
         dummy_impl.collections = {}
 
     def test_health(self):
@@ -88,41 +96,6 @@ class Test(TestCase):
 
         print(result)
 
-    def test_create_job(self):
-        resp = self.client.post('/openeo/jobs', content_type='application/json', headers=self._auth_header, data=json.dumps({
-            'process_graph': {},
-            'output': {}
-        }))
-
-        assert resp.status_code == 201
-        assert resp.content_length == 0
-        assert resp.headers['Location'].endswith('/openeo/jobs/07024ee9-7847-4b8a-b260-6c879a2b3cdc')
-
-    def test_queue_job(self):
-        resp = self.client.post('/openeo/jobs/07024ee9-7847-4b8a-b260-6c879a2b3cdc/results', headers=self._auth_header)
-
-        self.assertEqual(202, resp.status_code)
-
-    def test_get_job_info(self):
-        resp = self.client.get('/openeo/jobs/07024ee9-7847-4b8a-b260-6c879a2b3cdc', headers=self._auth_header)
-
-        self.assertEqual(200, resp.status_code)
-
-        info = resp.get_json()
-
-        self.assertEqual(info['job_id'], '07024ee9-7847-4b8a-b260-6c879a2b3cdc')
-        self.assertEqual(info['status'], 'running')
-
-    def test_cancel_job(self):
-        resp = self.client.delete('/openeo/jobs/07024ee9-7847-4b8a-b260-6c879a2b3cdc/results', headers=self._auth_header)
-
-        self.assertEqual(204, resp.status_code)
-
-    def test_api_propagates_http_status_codes(self):
-        resp = self.client.get('/openeo/jobs/unknown_job_id/results/some_file', headers=self._auth_header)
-
-        assert resp.status_code == 404
-
     def test_create_unsupported_service_type_returns_BadRequest(self):
         resp = self.client.post('/openeo/services', content_type='application/json', json={
             "process_graph": {'product_id': 'S2'},
@@ -145,3 +118,79 @@ class Test(TestCase):
         })
 
         self.assertEqual(500, resp.status_code)
+
+
+class BatchJobManagementTests(TestCase):
+    user_id = 'test'
+
+    def setUp(self):
+        app.config['TESTING'] = True
+        self.client = app.test_client()
+        self._auth_header = {
+            "Authorization": "Bearer {token}".format(
+                token=HttpAuthHandler.encode_basic_access_token(user_id=self.user_id)
+            )
+        }
+
+    def _create_job(self):
+        resp = self.client.post(
+            '/openeo/jobs', content_type='application/json', headers=self._auth_header,
+            data=json.dumps({'process_graph': {}})
+        )
+        job_id, user_id = max(dummy_impl.DummyBatchJobManagement.jobs.keys())
+
+        assert user_id == self.user_id
+        assert resp.status_code == 201
+        assert resp.content_length == 0
+        assert resp.headers['Location'].endswith('/openeo/jobs/{i}'.format(i=job_id))
+        return job_id
+
+    def _get_actions(self, job_id, user_id=None):
+        return dummy_impl.DummyBatchJobManagement.jobs[job_id, user_id or self.user_id]['actions']
+
+    def _get_job_info(self, job_id, user_id=None):
+        resp = self.client.get('/openeo/jobs/{i}'.format(i=job_id), headers=self._auth_header)
+        assert resp.status_code == 200
+        return resp.json
+
+    def test_create_job(self):
+        job_id = self._create_job()
+        assert self._get_actions(job_id) == ['create']
+
+    def test_start_job(self):
+        job_id = self._create_job()
+        assert self._get_actions(job_id) == ['create']
+        # Start processing it
+        resp = self.client.post('/openeo/jobs/{i}/results'.format(i=job_id), headers=self._auth_header)
+        assert resp.status_code == 202
+        assert self._get_actions(job_id) == ['create', 'start']
+        assert self._get_job_info(job_id)['status'] == 'queued'
+
+    def test_start_job_invalid(self):
+        resp = self.client.post('/openeo/jobs/foobar/results', headers=self._auth_header)
+        assert resp.status_code == 404
+        assert resp.json['code'] == 'JobNotFound'
+
+    def test_get_job_info(self):
+        job_id = self._create_job()
+        resp = self.client.get('/openeo/jobs/{i}'.format(i=job_id), headers=self._auth_header)
+        assert resp.status_code == 200
+        info = resp.json
+        assert info['id'] == job_id
+        assert info['status'] == "submitted"
+
+    def test_get_job_info_invalid(self):
+        resp = self.client.get('/openeo/jobs/foobar', headers=self._auth_header)
+        assert resp.status_code == 404
+        assert resp.json['code'] == 'JobNotFound'
+
+    def test_cancel_job(self):
+        job_id = self._create_job()
+        resp = self.client.delete('/openeo/jobs/{i}/results'.format(i=job_id), headers=self._auth_header)
+        assert resp.status_code == 204
+        assert self._get_actions(job_id) == ['create', 'cancel']
+        assert self._get_job_info(job_id)['status'] == 'canceled'
+
+    def test_api_propagates_http_status_codes(self):
+        resp = self.client.get('/openeo/jobs/unknown_job_id/results/some_file', headers=self._auth_header)
+        assert resp.status_code == 404

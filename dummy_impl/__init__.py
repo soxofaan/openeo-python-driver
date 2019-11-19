@@ -1,48 +1,18 @@
 import numbers
 import os
+import uuid
+from typing import List
 from unittest.mock import Mock
 
 from shapely.geometry import Polygon, MultiPolygon
 from shapely.geometry.collection import GeometryCollection
 
 from openeo import ImageCollection
-from openeo_driver.backend import SecondaryServices, OpenEoBackendImplementation, CollectionCatalog
+from openeo.internal.process_graph_visitor import ProcessGraphVisitor
+from openeo_driver.backend import SecondaryServices, OpenEoBackendImplementation, CollectionCatalog, BatchJobManagement
+from openeo_driver.errors import JobNotFoundException
 
 collections = {}
-
-
-def create_batch_job(*_):
-    return '07024ee9-7847-4b8a-b260-6c879a2b3cdc'
-
-
-def run_batch_job(*_):
-    return
-
-
-def get_batch_job_info(job_id, user_id):
-    return {
-        'job_id': job_id,
-        'status': 'running'
-    }
-
-
-def get_batch_jobs_info(_):
-    return [get_batch_job_info('07024ee9-7847-4b8a-b260-6c879a2b3cdc', 'test')]
-
-
-def get_batch_job_result_filenames(job_id):
-    pass
-
-
-def get_batch_job_result_output_dir(job_id):
-    return "/path/to/%s" % job_id
-
-
-def cancel_batch_job(job_id, user_id):
-    pass
-
-
-from openeo.internal.process_graph_visitor import ProcessGraphVisitor
 
 
 class DummyVisitor(ProcessGraphVisitor):
@@ -205,10 +175,65 @@ class DummyCatalog(CollectionCatalog):
         return image_collection
 
 
+class DummyBatchJobManagement(BatchJobManagement):
+    """
+    Dummy implementation of the Batch Job Management API
+    for testing purposes
+    """
+
+    jobs = {}
+    _job_counter = 0
+
+    def _get_job(self, job_id: str, user_id: str) -> dict:
+        try:
+            return self.jobs[job_id, user_id]
+        except KeyError:
+            raise JobNotFoundException(job_id)
+
+    def create_job(self, user_id: str, api_version: str, job_specification: dict) -> str:
+        self._job_counter += 1
+        job_id = 'deadbeef-batch-job-{c:06d}'.format(c=self._job_counter)
+        self.jobs[job_id, user_id] = {
+            "user_id": user_id,
+            "specification": job_specification,
+            "actions": ["create"],
+            "status": "submitted"
+        }
+        return job_id
+
+    def start_job(self, job_id: str, user_id: str) -> None:
+        self._get_job(job_id, user_id)["actions"].append("start")
+        self._get_job(job_id, user_id)["status"] = "queued"
+        return
+
+    def get_job_info(self, job_id: str, user_id: str) -> dict:
+        self._get_job(job_id, user_id)["actions"].append("info")
+        return {
+            'id': job_id,
+            'status': self._get_job(job_id, user_id)["status"]
+        }
+
+    def get_jobs_info(self, user_id: str) -> List[dict]:
+        return [
+            self.get_job_info('07024ee9-7847-4b8a-b260-6c879a2b3cdc', 'test')
+        ]
+
+    def get_result_filenames(self, job_id: str, user_id: str) -> List[str]:
+        return []
+
+    def get_result_output_dir(self, job_id: str, user_id: str) -> str:
+        return "/path/to/%s" % job_id
+
+    def cancel_job(self, job_id: str, user_id: str):
+        self._get_job(job_id, user_id)["actions"].append("cancel")
+        self._get_job(job_id, user_id)["status"] = "canceled"
+
+
 class DummyBackendImplementation(OpenEoBackendImplementation):
     def __init__(self):
         super(DummyBackendImplementation, self).__init__(
-            secondary_services=DummySecondaryServices(), catalog=DummyCatalog()
+            secondary_services=DummySecondaryServices(), catalog=DummyCatalog(),
+            batch_job_management=DummyBatchJobManagement(),
         )
 
     def output_formats(self) -> dict:

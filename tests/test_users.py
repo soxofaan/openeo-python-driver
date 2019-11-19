@@ -1,5 +1,8 @@
+# -*- coding: utf-8 -*-
+
 import base64
 import json
+import re
 
 import pytest
 from flask import Flask, jsonify, Response, request
@@ -198,3 +201,17 @@ def test_bearer_auth_oidc_success(app, url, expected_data, requests_mock):
         resp = client.get(url, headers=headers)
         assert resp.status_code == 200
         assert resp.data == expected_data
+
+
+@pytest.mark.parametrize("user_id", [
+    "foobar",
+    "with spaces",
+    "ŭníčôdə",
+])
+def test_basic_access_token_encode_decode(user_id):
+    user_id = "foobar"
+    handler = HttpAuthHandler()
+    token = handler.encode_basic_access_token(user_id=user_id)
+    assert re.match(r'^basic\.[a-zA-Z0-9]+$', token)
+    user = handler.resolve_basic_access_token(token)
+    assert user.user_id == user_id

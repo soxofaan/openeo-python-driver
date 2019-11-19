@@ -10,11 +10,9 @@ from openeo import ImageCollection
 from openeo.error_summary import ErrorSummary
 from openeo_driver.ProcessGraphDeserializer import (
     evaluate, getProcesses, getProcess,
-    create_batch_job, run_batch_job, get_batch_job_info, get_batch_jobs_info, cancel_batch_job,
-    get_batch_job_result_filenames, get_batch_job_result_output_dir,
     backend_implementation,
     summarize_exception)
-from openeo_driver.errors import OpenEOApiException
+from openeo_driver.errors import OpenEOApiException, ProcessGraphMissingException
 from openeo_driver.save_result import SaveResult
 from openeo_driver.users import HttpAuthHandler, User
 from openeo_driver.utils import replace_nan_values
@@ -108,6 +106,10 @@ def _error_response(error: Exception, status_code: int, summary: str = None):
     response = jsonify(error_json)
     response.status_code = status_code
     return response
+
+
+def response_202_accepted():
+    return make_response('', 202, {"Content-Type": "application/json"})
 
 
 def response_204_no_content():
@@ -359,49 +361,46 @@ def execute():
         return jsonify(replace_nan_values(result))
 
 
-@openeo_bp.route('/jobs', methods=['GET', 'POST'])
+@openeo_bp.route('/jobs', methods=['POST'])
 @auth_handler.requires_bearer_auth
 def create_job(user: User):
-    if request.method == 'POST':
-        print("Handling request: "+str(request))
-        print("Post data: "+str(request.data))
+    print("Handling request: " + str(request))
+    print("Post data: " + str(request.data))
 
-        job_specification = request.get_json()
+    job_specification = request.get_json()
+    if 'process_graph' not in job_specification:
+        raise ProcessGraphMissingException
 
-        if 'process_graph' not in job_specification:
-            return abort(400)
+    job_id = backend_implementation.batch_job_management.create_job(
+        user_id=user.user_id, api_version=g.version, job_specification=job_specification
+    )
 
-        job_id = create_batch_job(user.user_id, g.version, job_specification)
-
-        response = make_response("", 201)
-        response.headers['Location'] = request.base_url + '/' + job_id
-
-        return response
-    else:
-        return {
-            'jobs': get_batch_jobs_info(user.user_id)
-        }
+    response = make_response("", 201)
+    response.headers['Location'] = request.base_url + '/' + job_id
+    return response
 
 
-@openeo_bp.route('/jobs/<job_id>' , methods=['GET'])
+@openeo_bp.route('/jobs', methods=['GET'])
+@auth_handler.requires_bearer_auth
+def get_user_jobs_info(user: User):
+    return {
+        'jobs': backend_implementation.batch_job_management.get_jobs_info(user_id=user.user_id)
+    }
+
+
+@openeo_bp.route('/jobs/<job_id>', methods=['GET'])
 @auth_handler.requires_bearer_auth
 def get_job_info(job_id, user: User):
-    job_info = get_batch_job_info(job_id, user.user_id)
-    return jsonify(job_info) if job_info else abort(404)
+    job_info = backend_implementation.batch_job_management.get_job_info(job_id=job_id, user_id=user.user_id)
+    return jsonify(job_info)
 
 
 @openeo_bp.route('/jobs/<job_id>/results', methods=['POST'])
 @auth_handler.requires_bearer_auth
-def queue_job(job_id, user: User):
+def start_job(job_id, user: User):
     print("Handling request: " + str(request))
-
-    job_info = get_batch_job_info(job_id, user.user_id)
-
-    if job_info:
-        run_batch_job(job_id, user.user_id)
-        return make_response("", 202)
-    else:
-        abort(404)
+    backend_implementation.batch_job_management.start_job(job_id=job_id, user_id=user.user_id)
+    return response_202_accepted()
 
 
 @openeo_bp.route('/jobs/<job_id>/results', methods=['GET'])
@@ -409,44 +408,30 @@ def queue_job(job_id, user: User):
 def list_job_results(job_id, user: User):
     print("Handling request: " + str(request))
 
-    filenames = get_batch_job_result_filenames(job_id, user.user_id)
-
-    if filenames is not None:
-        job_results = {
-            "links": [{"href": request.base_url + "/" + filename} for filename in filenames]
-        }
-
-        return jsonify(job_results)
-    else:
-        return abort(404)
+    filenames = backend_implementation.batch_job_management.get_result_filenames(job_id=job_id, user_id=user.user_id)
+    # TODO: set more fields and headers (https://open-eo.github.io/openeo-api/apireference/#tag/Batch-Job-Management/paths/~1jobs~1{job_id}~1results/get)
+    job_results = {
+        "links": [{"href": request.base_url + "/" + filename} for filename in filenames]
+    }
+    return jsonify(job_results)
 
 
 @openeo_bp.route('/jobs/<job_id>/results/<filename>', methods=['GET'])
 @auth_handler.requires_bearer_auth
 def get_job_result(job_id, filename, user: User):
     print("Handling request: " + str(request))
-
-    job_info = get_batch_job_info(job_id, user.user_id)
-
-    if job_info:
-        output_dir = get_batch_job_result_output_dir(job_id)
-        return send_from_directory(output_dir, filename)
-    else:
-        abort(404)
+    output_dir = backend_implementation.batch_job_management.get_result_output_dir(job_id=job_id, user_id=user.user_id)
+    return send_from_directory(output_dir, filename)
 
 
 @openeo_bp.route('/jobs/<job_id>/results', methods=['DELETE'])
 @auth_handler.requires_bearer_auth
 def cancel_job(job_id, user: User):
     print("Handling request: " + str(request))
+    backend_implementation.batch_job_management.cancel_job(job_id=job_id, user_id=user.user_id)
+    return response_204_no_content()
 
-    job_info = get_batch_job_info(job_id, user.user_id)
 
-    if job_info:
-        cancel_batch_job(job_id, user.user_id)
-        return make_response("", 204)
-    else:
-        abort(404)
 
 #SERVICES API https://open-eo.github.io/openeo-api/v/0.3.0/apireference/#tag/Web-Service-Management
 

@@ -150,14 +150,51 @@ class CollectionIncompleteMetadataWarning(UserWarning):
     pass
 
 
+class BatchJobManagement:
+    """
+    Abstract API for the batch job "microservice"
+
+    https://open-eo.github.io/openeo-api/apireference/#tag/Batch-Job-Management
+    """
+
+    # TODO: pass user id to constructor?
+
+    def create_job(self, user_id: str, api_version: str, job_specification: dict) -> str:
+        raise NotImplementedError
+
+    def start_job(self, job_id: str, user_id: str) -> None:
+        raise NotImplementedError
+
+    def cancel_job(self, job_id: str, user_id: str):
+        raise NotImplementedError
+
+    def get_job_info(self, job_id: str, user_id: str) -> dict:
+        raise NotImplementedError
+
+    def get_jobs_info(self, user_id: str) -> List[dict]:
+        raise NotImplementedError
+
+    def get_result_filenames(self, job_id: str, user_id: str) -> List[str]:
+        raise NotImplementedError
+
+    def get_result_output_dir(self, job_id: str, user_id: str) -> str:
+        raise NotImplementedError
+
+
 class OpenEoBackendImplementation:
     """
     Simple container of all openEo "microservices"
     """
 
-    def __init__(self, secondary_services: SecondaryServices, catalog: CollectionCatalog):
+    def __init__(
+            self,
+            secondary_services: SecondaryServices,
+            catalog: CollectionCatalog,
+            batch_job_management: BatchJobManagement
+    ):
         self.secondary_services = secondary_services
         self.catalog = catalog
+        self.batch_job_management = batch_job_management
 
     def health_check(self) -> str:
         return "OK"

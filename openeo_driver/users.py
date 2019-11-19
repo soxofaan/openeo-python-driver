@@ -134,6 +134,10 @@ class HttpAuthHandler:
             raise TokenInvalidException
         return User(user_id=user_id, info={"authentication": "basic"})
 
+    @classmethod
+    def encode_basic_access_token(cls, user_id:str):
+        return cls._BASIC_ACCESS_TOKEN_PREFIX + base64.urlsafe_b64encode(user_id.encode('utf-8')).decode('ascii')
+
     def resolve_oidc_access_token(self, access_token: str) -> User:
         try:
             resp = requests.get(current_app.config["OPENID_CONNECT_CONFIG_URL"])
