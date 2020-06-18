@@ -1,0 +1,92 @@
+{
+    "id": "bbox_mol",
+    "summary": "Filter spatially with bounding box around Mol",
+    "description": "Filter spatially with bounding box around Mol",
+    "parameters": [
+        {
+            "name": "data",
+            "description": "A data cube.",
+            "schema": {
+                "type": "object",
+                "subtype": "raster-cube"
+            }
+        },
+        {
+            "name": "margin",
+            "description": "Margin to add to each side of the bounding box.",
+            "schema": {
+                "type": "number"
+            },
+            "default": 0.1
+        }
+    ],
+    "returns": {
+        "description": "filtered datacube",
+        "schema": {
+            "type": "object",
+            "subtype": "raster-cube"
+        }
+    },
+    "process_graph": {
+        "west": {
+            "process_id": "substract",
+            "arguments": {
+                "x": 5.05,
+                "y": {
+                    "from_parameter": "margin"
+                }
+            }
+        },
+        "south": {
+            "process_id": "subtract",
+            "arguments": {
+                "x": 51.20,
+                "y": {
+                    "from_parameter": "margin"
+                }
+            }
+        },
+        "east": {
+            "process_id": "add",
+            "arguments": {
+                "x": 5.10,
+                "y": {
+                    "from_parameter": "margin"
+                }
+            }
+        },
+        "north": {
+            "process_id": "add",
+            "arguments": {
+                "x": 51.23,
+                "y": {
+                    "from_parameter": "margin"
+                }
+            }
+        },
+        "bboxmol": {
+            "process_id": "filter_bbox",
+            "arguments": {
+                "data": {
+                    "from_parameter": "data"
+                },
+                "extent": {
+                    "west": {
+                        "from_node": "west"
+                    },
+                    "south": {
+                        "from_node": "south"
+                    },
+                    "east": {
+                        "from_node": "east"
+                    },
+                    "north": {
+                        "from_node": "north"
+                    },
+                    "crs": "EPSG:4326"
+                }
+            },
+            "result": true
+        }
+    }
+}

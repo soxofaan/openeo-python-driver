@@ -1,0 +1,18 @@
+{
+  "loadcollection1": {
+    "process_id": "load_collection",
+    "arguments": {
+      "id": "S2_FOOBAR"
+    }
+  },
+  "bboxmol1": {
+    "process_id": "bbox_mol_with_margin",
+    "arguments": {
+      "data": {
+        "from_node": "loadcollection1"
+      },
+      "margin": 0.5
+    },
+    "result": true
+  }
+}

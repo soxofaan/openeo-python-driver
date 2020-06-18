@@ -734,7 +734,7 @@ def apply_process(process_id: str, args: Dict, viewingParameters):
         return image_collection.aggregate_temporal(intervals, labels, process_id, dimension)
     if user_defined_process_registry.has_udp(user_id="todo", process_id=process_id):
         spec = user_defined_process_registry.get_udp_spec(user_id="todo", process_id=process_id)
-        return evaluate_udp(spec, args, viewingParameters)
+        return evaluate_udp(process_id=process_id, spec=spec, args=args, viewingParameters=viewingParameters)
     else:
         process_registry = get_process_registry(ComparableVersion(viewingParameters["version"]))
         process_function = process_registry.get_function(process_id)
@@ -782,8 +782,15 @@ def _as_geometry_collection(feature_collection: dict) -> dict:
     }
 
 
-def evaluate_udp(spec: dict, args: dict, viewingParameters: dict):
+def evaluate_udp(process_id:str, spec: dict, args: dict, viewingParameters: dict):
     pg = spec["process_graph"]
     for param in spec["parameters"]:
-        viewingParameters[param["name"]] = args[param["name"]]
+        name = param["name"]
+        if name in args:
+            value = args[name]
+        elif "default" in param:
+            value = param["default"]
+        else:
+            raise ProcessParameterRequiredException(process=process_id, parameter=name)
+        viewingParameters[name] = value
     return evaluate(pg, viewingParameters=viewingParameters)

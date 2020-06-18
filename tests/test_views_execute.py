@@ -586,11 +586,53 @@ def test_user_defined_process_bbox_mol_basic(api100):
     user_defined_process_registry.add_udp(user_id="todo", process_id="bbox_mol", spec=bbox_mol_spec)
     api100.check_result("udp_bbox_mol_basic.json")
     expected_bbox = {
-        "left": 5.071,
-        "bottom": 51.21,
-        "right": 5.1028,
+        "left": 5.05,
+        "bottom": 51.20,
+        "right": 5.10,
         "top": 51.23,
         "srs": "EPSG:4326"
     }
-    for k, v in expected_bbox.items():
-        assert api100.collections['S2_FOOBAR'].viewingParameters[k] == v
+    assert expected_bbox == {
+        k: api100.collections['S2_FOOBAR'].viewingParameters[k]
+        for k in expected_bbox.keys()
+    }
+
+
+def test_user_defined_process_bbox_mol_with_margin_basic(api100):
+    user_defined_process_registry.add_udp(
+        user_id="todo",
+        process_id="bbox_mol_with_margin",
+        spec=api100.load_json("udp/bbox_mol_with_margin.json")
+    )
+    api100.check_result("udp_bbox_mol_with_margin_basic.json")
+    expected_bbox = {
+        "left": 5.0 - 0.5,
+        "bottom": 51.15 - 0.5,
+        "right": 5.15 + 0.5,
+        "top": 51.28 + 0.5,
+        "srs": "EPSG:4326"
+    }
+    assert expected_bbox == {
+        k: api100.collections['S2_FOOBAR'].viewingParameters[k]
+        for k in expected_bbox.keys()
+    }
+
+
+def test_user_defined_process_bbox_mol_with_margin_default(api100):
+    user_defined_process_registry.add_udp(
+        user_id="todo",
+        process_id="bbox_mol_with_margin",
+        spec=api100.load_json("udp/bbox_mol_with_margin.json")
+    )
+    api100.check_result("udp_bbox_mol_with_margin_default.json")
+    expected_bbox = {
+        "left": 5.0 - 0.1,
+        "bottom": 51.15 - 0.1,
+        "right": 5.15 + 0.1,
+        "top": 51.28 + 0.1,
+        "srs": "EPSG:4326"
+    }
+    assert expected_bbox == {
+        k: api100.collections['S2_FOOBAR'].viewingParameters[k]
+        for k in expected_bbox.keys()
+    }
